@@ -1,0 +1,3 @@
+add_subdirectory(insert_sample)
+add_subdirectory(query_sample)
+add_subdirectory(cursor_sample)
