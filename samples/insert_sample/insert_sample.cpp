@@ -6,6 +6,10 @@
 #include <boost/log/core.hpp>
 #include <boost/log/trivial.hpp>
 #include <boost/log/expressions.hpp>
+#include <boost/uuid/uuid.hpp>
+#include <boost/uuid/uuid_io.hpp>
+#include <boost/uuid/uuid_generators.hpp>
+
 
 int main(int, char *argv[])
 {
@@ -35,8 +39,9 @@ int main(int, char *argv[])
                 size_t items = 10000;
                 for (int i = 0; i != items; ++i)
                 {
-                    char* ch = i < (items - 1) ? ",\n" : ";\n";
-                    statement += " (" + std::to_string(i) + ", 'xxxxxxxxxxxxxx')" + ch;
+                    const char* ch = i < (items - 1) ? ",\n" : ";\n";
+                    std::string val = to_string(boost::uuids::random_generator()());
+                    statement += " (" + std::to_string(i) + ", '" + val + "')" + ch;
                 }
 
                 std::cerr << connection->get_log_id() << " inserting!!" << std::endl;
