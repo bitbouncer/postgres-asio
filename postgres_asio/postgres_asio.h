@@ -5,9 +5,16 @@
 #include <boost/chrono/system_clocks.hpp>
 #include <boost/enable_shared_from_this.hpp>
 #include <deque>
-#include <libpq-fe.h>
 
-//http://stackoverflow.com/questions/17648725/long-running-blocking-operations-in-boost-asio-handlers
+#ifdef WIN32
+#include <libpq-fe.h>
+#endif
+
+#ifdef __LINUX__
+#include <postgresql/libpq-fe.h>
+#endif
+
+//inspiration
 //https://github.com/brianc/node-libpq
 
 namespace postgres_asio
