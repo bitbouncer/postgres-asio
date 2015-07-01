@@ -24,11 +24,17 @@ void handle_fetch1000(boost::shared_ptr<postgres_asio::connection> connection, s
     connection->exec("FETCH 1000 in mycursor", [connection, total_count](int ec, boost::shared_ptr<PGresult> res) { handle_fetch1000(connection, total_count, ec, std::move(res)); });
 }
 
-int main(int, char *argv[])
+int main(int argc, char *argv[])
 {
+    std::string host;
     boost::log::core::get()->set_filter(boost::log::trivial::severity >= boost::log::trivial::info);
     std::string connect_string = "user=postgres password=postgres dbname=test";
 
+    if (argc > 1)
+    {
+        connect_string += std::string("host=") + argv[1];
+    }
+   
     boost::asio::io_service fg_ios;
     boost::asio::io_service bg_ios;
     std::auto_ptr<boost::asio::io_service::work> work2(new boost::asio::io_service::work(fg_ios));

@@ -11,10 +11,15 @@
 #include <boost/uuid/uuid_generators.hpp>
 
 
-int main(int, char *argv[])
+int main(int argc, char *argv[])
 {
     boost::log::core::get()->set_filter(boost::log::trivial::severity >= boost::log::trivial::info);
     std::string connect_string = "user=postgres password=postgres dbname=test";
+    
+    if (argc > 1)
+    {
+        connect_string += std::string("host=") + argv[1];
+    }
 
     boost::asio::io_service fg_ios;
     boost::asio::io_service bg_ios;

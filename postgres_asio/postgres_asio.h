@@ -50,7 +50,7 @@ namespace postgres_asio
         std::string last_error() const;
         uint32_t    backend_pid() const;
 
-        void        set_client_encoding(std::string s);
+        bool        set_client_encoding(std::string s);
         void        set_log_id(std::string id);
         std::string get_log_id() const;
         void        set_warning_timout(uint32_t ms);

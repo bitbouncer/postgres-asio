@@ -50,7 +50,7 @@ namespace postgres_asio
     std::string connection::last_error() const                 { return PQerrorMessage(_pg_conn); }
     uint32_t    connection::backend_pid() const                { return (uint32_t)PQbackendPID(_pg_conn); }
     int         connection::socket() const                     { return PQsocket(_pg_conn); }
-    void        connection::set_client_encoding(std::string s) { PQsetClientEncoding(_pg_conn, s.c_str()); }
+    bool        connection::set_client_encoding(std::string s) { return (PQsetClientEncoding(_pg_conn, s.c_str()) == 0); }
     void        connection::set_log_id(std::string id)         { _log_id = id; }
     std::string connection::get_log_id() const                 { return _log_id; }
     void        connection::set_warning_timout(uint32_t ms)    { _warn_timeout = ms; }
