@@ -1,6 +1,6 @@
+#include <future>
 #include <boost/bind.hpp>
 #include "postgres_asio.h"
-
 #include <boost/log/core.hpp>
 #include <boost/log/trivial.hpp>
 #include <boost/log/expressions.hpp>
@@ -68,6 +68,30 @@ namespace postgres_asio
         _bg_ios.post(boost::bind(&connection::_bg_connect, this, self, "", cb));
     }
 
+    int connection::connect(std::string connect_string)
+    {
+        std::promise<int> p;
+        std::future<int>  f = p.get_future();
+        connect(connect_string, [&p](int ec)
+        {
+            p.set_value(ec);
+        });
+        f.wait();
+        return f.get();
+    }
+
+    int connection::connect()
+    {
+        std::promise<int> p;
+        std::future<int>  f = p.get_future();
+        connect([&p](int ec)
+        {
+            p.set_value(ec);
+        });
+        f.wait();
+        return f.get();
+    }
+
     // connect syncrounous and run callcack from fg thread event loop
     void connection::_bg_connect(boost::shared_ptr<connection> self, std::string connect_string, on_connect_callback cb)
     {
@@ -77,12 +101,17 @@ namespace postgres_asio
         int32_t duration = (int32_t)(now() - _start_ts);
         if (status == CONNECTION_OK)
         {
-            BOOST_LOG_TRIVIAL(info) << _log_id  << ", postgres::connect(async) PQconnectdb complete, t=" << duration;
+            if (duration > _warn_timeout)
+            {
+                BOOST_LOG_TRIVIAL(warning) << _log_id << ", postgres::connect - took long time, t=" << duration;
+            }
+
+            BOOST_LOG_TRIVIAL(info) << _log_id  << ", postgres::connect PQconnectdb complete, t=" << duration;
             _socket.assign(boost::asio::ip::tcp::v4(), socket());
             _fg_ios.post([this, self, cb](){ cb(0); });
             return;
         }
-        BOOST_LOG_TRIVIAL(error) << _log_id << ", postgres::connect(async) PQconnectdb failed, status=" << status << ", t=" << duration;
+        BOOST_LOG_TRIVIAL(error) << _log_id << ", postgres::connect PQconnectdb failed, status=" << status << ", t=" << duration;
         _fg_ios.post([this, self, status, cb](){ cb(status); });
     }
 
@@ -94,11 +123,24 @@ namespace postgres_asio
         _current_statement = statement;
         if (PQsendQuery(_pg_conn, statement.c_str()) == 0) // 1 os good, 0 is bad...
         {
-            BOOST_LOG_TRIVIAL(error) << _log_id << ", postgres::exec(async) PQsendQuery failed fast: s=" << statement.substr(0, STATEMENT_LOG_BYTES);
+            BOOST_LOG_TRIVIAL(error) << _log_id << ", postgres::exec PQsendQuery failed fast: s=" << statement.substr(0, STATEMENT_LOG_BYTES);
             _fg_ios.post([this, self, cb](){ cb(PGRES_FATAL_ERROR, NULL); });
             return;
         }
         _socket.async_read_some(boost::asio::null_buffers(), boost::bind(&connection::_fg_socket_rx_cb, this, boost::asio::placeholders::error, self, cb));
+    }
+
+    std::pair<int, boost::shared_ptr<PGresult>> connection::exec(std::string statement)
+    {
+        std::promise<std::pair<int, boost::shared_ptr<PGresult>>> p;
+        std::future<std::pair<int, boost::shared_ptr<PGresult>>>  f = p.get_future();
+        exec(statement, [&p](int ec, boost::shared_ptr<PGresult> res)
+        {
+            std::pair<int, boost::shared_ptr<PGresult>> val(ec, res);
+            p.set_value(val);
+        });
+        f.wait();
+        return f.get();
     }
 
     void connection::_fg_socket_rx_cb(const boost::system::error_code& ec, boost::shared_ptr<connection> self, on_query_callback cb)
@@ -106,7 +148,7 @@ namespace postgres_asio
         BOOST_LOG_TRIVIAL(trace) << _log_id << ", " << BOOST_CURRENT_FUNCTION;
         if (ec)
         {
-            BOOST_LOG_TRIVIAL(warning) << _log_id << ", postgres::exec(async) asio ec:" << ec.message();
+            BOOST_LOG_TRIVIAL(warning) << _log_id << ", postgres::exec asio ec:" << ec.message();
             cb(ec.value(), NULL);
             return;
         }
@@ -114,7 +156,7 @@ namespace postgres_asio
         int res = PQconsumeInput(_pg_conn);
         if (!res)
         {
-            BOOST_LOG_TRIVIAL(warning) << _log_id << ", postgres::exec(async) PQconsumeInput read error";
+            BOOST_LOG_TRIVIAL(warning) << _log_id << ", postgres::exec PQconsumeInput read error";
             cb(PGRES_FATAL_ERROR, NULL); // we reuse a error code here...
             return;
         }
@@ -145,7 +187,7 @@ namespace postgres_asio
 
         if (_results.size() == 0)
         {
-            BOOST_LOG_TRIVIAL(error) << _log_id << ", postgres::exec(async) returned no result, t=" << duration << ", s=" << _current_statement.substr(0, STATEMENT_LOG_BYTES);
+            BOOST_LOG_TRIVIAL(error) << _log_id << ", postgres::exec returned no result, t=" << duration << ", s=" << _current_statement.substr(0, STATEMENT_LOG_BYTES);
             cb(PGRES_FATAL_ERROR, NULL); // we reuse a error code here...
             return;
         }
@@ -164,20 +206,20 @@ namespace postgres_asio
         case PGRES_NONFATAL_ERROR:
         case PGRES_COPY_BOTH:
         case PGRES_SINGLE_TUPLE:
-            BOOST_LOG_TRIVIAL(debug) << _log_id << ", postgres::exec(async) complete, t=" << duration << ", s=" << _current_statement.substr(0, STATEMENT_LOG_BYTES);
+            BOOST_LOG_TRIVIAL(debug) << _log_id << ", postgres::exec complete, t=" << duration << ", s=" << _current_statement.substr(0, STATEMENT_LOG_BYTES);
             if (duration > _warn_timeout)
             {
-                BOOST_LOG_TRIVIAL(warning) << _log_id << ", postgres::exec(async) complete - took long time, t=" << duration << ", s = " << _current_statement.substr(0, STATEMENT_LOG_BYTES);
+                BOOST_LOG_TRIVIAL(warning) << _log_id << ", postgres::exec complete - took long time, t=" << duration << ", s = " << _current_statement.substr(0, STATEMENT_LOG_BYTES);
             }
             cb(0, std::move(last_result));
             break;
         case PGRES_BAD_RESPONSE:
         case PGRES_FATAL_ERROR:
-            BOOST_LOG_TRIVIAL(error) << _log_id << ", postgres::exec(async) failed, t=" << duration << ", s=" << _current_statement.substr(0, STATEMENT_LOG_BYTES);
+            BOOST_LOG_TRIVIAL(error) << _log_id << ", postgres::exec failed, t=" << duration << ", s=" << _current_statement.substr(0, STATEMENT_LOG_BYTES);
             cb(status, std::move(last_result));
             break;
         default:
-            BOOST_LOG_TRIVIAL(warning) << _log_id << ", postgres::exec(async) unknown status code, t=" << duration << ", s=" << _current_statement.substr(0, STATEMENT_LOG_BYTES);
+            BOOST_LOG_TRIVIAL(warning) << _log_id << ", postgres::exec unknown status code, t=" << duration << ", s=" << _current_statement.substr(0, STATEMENT_LOG_BYTES);
             cb(status, std::move(last_result));
             break;
         }

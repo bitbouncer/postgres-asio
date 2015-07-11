@@ -1,5 +1,5 @@
 #pragma once
-
+#include <utility>
 #include <boost/asio.hpp>
 #include <boost/function.hpp>
 #include <boost/chrono/system_clocks.hpp>
@@ -36,11 +36,19 @@ namespace postgres_asio
             password -- password used if the backend demands password authentication.
             options  -- trace/debug options to send to backend.
             tty      -- file or tty for optional debug output from backend.
+
+            async connect
             */
         void connect(std::string connect_string, on_connect_callback cb);
+        //async connect
         void connect(on_connect_callback cb);
 
-        //status
+        //sync connect
+        int connect(std::string connect_string);
+        //sync connect
+        int connect();
+
+        //status (non blocking)
         std::string user_name() const;
         std::string password() const;
         std::string host_name() const;
@@ -55,7 +63,10 @@ namespace postgres_asio
         std::string get_log_id() const;
         void        set_warning_timout(uint32_t ms);
 
+        //async exec
         void exec(std::string statement, on_query_callback cb);
+        //sync exec
+        std::pair<int, boost::shared_ptr<PGresult>> exec(std::string statement);
     private:
         int socket() const;
 
