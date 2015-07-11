@@ -111,7 +111,7 @@ namespace postgres_asio
             _fg_ios.post([this, self, cb](){ cb(0); });
             return;
         }
-        BOOST_LOG_TRIVIAL(error) << _log_id << ", postgres::connect PQconnectdb failed, status=" << status << ", t=" << duration;
+        BOOST_LOG_TRIVIAL(error) << _log_id << ", postgres::connect PQconnectdb failed, status=" << status << ", " << last_error() << ", t=" << duration;
         _fg_ios.post([this, self, status, cb](){ cb(status); });
     }
 
