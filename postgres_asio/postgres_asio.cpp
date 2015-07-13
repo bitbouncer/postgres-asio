@@ -215,7 +215,7 @@ namespace postgres_asio
             break;
         case PGRES_BAD_RESPONSE:
         case PGRES_FATAL_ERROR:
-            BOOST_LOG_TRIVIAL(error) << _log_id << ", postgres::exec failed, t=" << duration << ", s=" << _current_statement.substr(0, STATEMENT_LOG_BYTES);
+            BOOST_LOG_TRIVIAL(error) << _log_id << ", postgres::exec failed " << last_error() << ", t=" << duration << ", s=" << _current_statement.substr(0, STATEMENT_LOG_BYTES);
             cb(status, std::move(last_result));
             break;
         default:
