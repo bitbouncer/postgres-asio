@@ -11,7 +11,11 @@
 #endif
 
 #ifdef __LINUX__
+#if __LSB_DISTRIBUTOR_ID__ == "centos"
+#include <libpq-fe.h>
+#else
 #include <postgresql/libpq-fe.h>
+#endif
 #endif
 
 //inspiration
