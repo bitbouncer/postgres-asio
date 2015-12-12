@@ -10,7 +10,7 @@ if(WIN32)
 endif()    
 
 if(__LINUX__)
-     set(EXT_LIBS postgres_asio pq ${CSI_HTTP_LIBS})
+     set(EXT_LIBS postgres_asio boost_log boost_thread boost_system pthread pq)
 endif()
 
 add_subdirectory(postgres_asio)
