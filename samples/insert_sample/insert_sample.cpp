@@ -62,10 +62,11 @@ int main(int argc, char *argv[])
     }
 
     BOOST_LOG_TRIVIAL(debug) << "work reset";
-    fg_work.reset();
     bg_work.reset();
     BOOST_LOG_TRIVIAL(debug) << "bg join";
     bg.join();
+
+    fg_work.reset();
     BOOST_LOG_TRIVIAL(debug) << "fg join";
     fg.join();
     BOOST_LOG_TRIVIAL(debug) << "done";

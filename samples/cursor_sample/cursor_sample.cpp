@@ -15,19 +15,24 @@ void handle_fetch1000(boost::shared_ptr<postgres_asio::connection> connection, s
     
     int tuples_in_batch = PQntuples(res.get());
     total_count += tuples_in_batch;
-    std::cerr << "got " << tuples_in_batch << ", total: " << total_count << std::endl;
+    BOOST_LOG_TRIVIAL(info) << "got " << tuples_in_batch << ", total: " << total_count;
     if (tuples_in_batch == 0)
     {
-        connection->exec("CLOSE mycursor; COMMIT", [connection](int ec, boost::shared_ptr<PGresult> res) { });
+        BOOST_LOG_TRIVIAL(info) << "calling async_exec CLOSE mycursor; COMMIT....";
+        connection->exec("CLOSE mycursor; COMMIT", [connection](int ec, boost::shared_ptr<PGresult> res) 
+        { 
+            BOOST_LOG_TRIVIAL(info) << "async processing done";
+        });
         return;
     }
+    BOOST_LOG_TRIVIAL(info) << "calling async_exec FETCH 1000 in mycursor....";
     connection->exec("FETCH 1000 in mycursor", [connection, total_count](int ec, boost::shared_ptr<PGresult> res) { handle_fetch1000(connection, total_count, ec, std::move(res)); });
 }
 
 int main(int argc, char *argv[])
 {
     std::string host;
-    boost::log::core::get()->set_filter(boost::log::trivial::severity >= boost::log::trivial::info);
+    boost::log::core::get()->set_filter(boost::log::trivial::severity >= boost::log::trivial::debug);
     std::string connect_string = "user=postgres password=postgres dbname=test";
 
     if (argc > 1)
@@ -37,8 +42,8 @@ int main(int argc, char *argv[])
    
     boost::asio::io_service fg_ios;
     boost::asio::io_service bg_ios;
-    std::auto_ptr<boost::asio::io_service::work> work2(new boost::asio::io_service::work(fg_ios));
-    std::auto_ptr<boost::asio::io_service::work> work1(new boost::asio::io_service::work(bg_ios));
+    std::auto_ptr<boost::asio::io_service::work> fg_work(new boost::asio::io_service::work(fg_ios)); // this keeps the fg_ios alive 
+    std::auto_ptr<boost::asio::io_service::work> bg_work(new boost::asio::io_service::work(bg_ios)); // this keeps the bg_ios alive
     boost::thread fg(boost::bind(&boost::asio::io_service::run, &fg_ios));
     boost::thread bg(boost::bind(&boost::asio::io_service::run, &bg_ios));
 
@@ -48,35 +53,36 @@ int main(int argc, char *argv[])
     {
         if (!ec)
         {
+            BOOST_LOG_TRIVIAL(info) << "calling async_exec BEGIN";
             connection->exec("BEGIN", [connection](int ec, boost::shared_ptr<PGresult> res)
             {
                 if (ec)
                 {
-                    std::cerr << "BEGIN failed ec:" << ec << " last_error: " << connection->last_error() << std::endl;
+                    BOOST_LOG_TRIVIAL(error) << "BEGIN failed ec:" << ec << " last_error: " << connection->last_error();
                     return;
                 }
+                BOOST_LOG_TRIVIAL(info) << "calling async_exec DECLARE mycursor....";
                 connection->exec("DECLARE mycursor CURSOR FOR SELECT * from postgres_asio_sample", [connection](int ec, boost::shared_ptr<PGresult> res)
                 {
                     if (ec)
                     {
-                        std::cerr << "DECLARE mycursor... failed ec:" << ec << " last_error: " << connection->last_error() << std::endl;
+                        BOOST_LOG_TRIVIAL(error) << "DECLARE mycursor... failed ec:" << ec << " last_error: " << connection->last_error();
                         return;
                     }
+                    BOOST_LOG_TRIVIAL(info) << "calling async_exec FETCH 1000 in mycursor....";
                     connection->exec("FETCH 1000 in mycursor", [connection](int ec, boost::shared_ptr<PGresult> res){ handle_fetch1000(connection, 0, ec, std::move(res)); });
                 });
             });
         }
     });
 
-  while (true)
-  {
-     boost::this_thread::sleep(boost::posix_time::milliseconds(1000));
-  }
+    BOOST_LOG_TRIVIAL(debug) << "work reset";
+    bg_work.reset();
+    BOOST_LOG_TRIVIAL(debug) << "bg join";
+    bg.join();
 
-   work1.reset();
-   work2.reset();
-   //bg_ios.stop();
-   //fg_ios.stop();
-   bg.join();
-   fg.join();
+    fg_work.reset();
+    BOOST_LOG_TRIVIAL(debug) << "fg join";
+    fg.join();
+    BOOST_LOG_TRIVIAL(debug) << "done";
 }

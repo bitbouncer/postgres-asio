@@ -9,7 +9,7 @@
 
 int main(int argc, char *argv[])
 {
-    boost::log::core::get()->set_filter(boost::log::trivial::severity >= boost::log::trivial::info);
+    boost::log::core::get()->set_filter(boost::log::trivial::severity >= boost::log::trivial::debug);
     std::string connect_string = "user=postgres password=postgres dbname=test";
     
     if (argc > 1)
@@ -19,31 +19,34 @@ int main(int argc, char *argv[])
 
     boost::asio::io_service fg_ios;
     boost::asio::io_service bg_ios;
-    std::auto_ptr<boost::asio::io_service::work> work2(new boost::asio::io_service::work(fg_ios));
-    std::auto_ptr<boost::asio::io_service::work> work1(new boost::asio::io_service::work(bg_ios));
+    std::auto_ptr<boost::asio::io_service::work> fg_work(new boost::asio::io_service::work(fg_ios)); // this keeps the fg_ios alive 
+    std::auto_ptr<boost::asio::io_service::work> bg_work(new boost::asio::io_service::work(bg_ios)); // this keeps the bg_ios alive
     boost::thread fg(boost::bind(&boost::asio::io_service::run, &fg_ios));
     boost::thread bg(boost::bind(&boost::asio::io_service::run, &bg_ios));
 
     auto connection = boost::make_shared<postgres_asio::connection>(fg_ios, bg_ios);
     connection->connect(connect_string, [connection](int ec)
     {
-        std::cerr << "connect_async : " << ec << std::endl;
+        BOOST_LOG_TRIVIAL(info) << "connect_async ec : " << ec;
         if (!ec)
         {
+            BOOST_LOG_TRIVIAL(info) << "calling select_async";
             connection->exec("select * from postgres_asio_sample;", [connection](int ec, boost::shared_ptr<PGresult> res)
             {
                 if (ec)
                 {
-                    std::cerr << "select failed " << ec << std::endl;
+                    BOOST_LOG_TRIVIAL(error) << "select failed, ec: " << ec;
                     return;
                 }
 
-                int nFields = PQnfields(res.get());
-                for (int i = 0; i < nFields; i++)
-                    printf("%-15s", PQfname(res.get(), i));
+                BOOST_LOG_TRIVIAL(info) << "select_async returned " << PQntuples(res.get()) << " rows";
 
-                printf("\n\n");
-                printf("query returned %d rows", PQntuples(res.get()));
+                //int nFields = PQnfields(res.get());
+                //for (int i = 0; i < nFields; i++)
+                //    printf("%-15s", PQfname(res.get(), i));
+
+                //printf("\n\n");
+                //printf("query returned %d rows", PQntuples(res.get()));
 
                 //for (int i = 0; i < PQntuples(res.get()); i++)
                 //{
@@ -51,23 +54,17 @@ int main(int argc, char *argv[])
                 //        printf("%-15s", PQgetvalue(res.get(), i, j));
                 //    printf("\n");
                 //}
-                ;
             });
         }
     });
 
+    BOOST_LOG_TRIVIAL(debug) << "work reset";
+    bg_work.reset();
+    BOOST_LOG_TRIVIAL(debug) << "bg join";
+    bg.join();
 
-
-
-  while (true)
-  {
-     boost::this_thread::sleep(boost::posix_time::milliseconds(1000));
-  }
-
-   work1.reset();
-   work2.reset();
-   //bg_ios.stop();
-   //fg_ios.stop();
-   bg.join();
-   fg.join();
+    fg_work.reset();
+    BOOST_LOG_TRIVIAL(debug) << "fg join";
+    fg.join();
+    BOOST_LOG_TRIVIAL(debug) << "done";
 }
