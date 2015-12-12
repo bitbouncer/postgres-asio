@@ -13,7 +13,7 @@
 
 int main(int argc, char *argv[])
 {
-    boost::log::core::get()->set_filter(boost::log::trivial::severity >= boost::log::trivial::info);
+    boost::log::core::get()->set_filter(boost::log::trivial::severity >= boost::log::trivial::debug);
     std::string connect_string = "user=postgres password=postgres dbname=test";
     
     if (argc > 1)
@@ -23,16 +23,14 @@ int main(int argc, char *argv[])
 
     boost::asio::io_service fg_ios;
     boost::asio::io_service bg_ios;
-    std::auto_ptr<boost::asio::io_service::work> work2(new boost::asio::io_service::work(fg_ios));
-    std::auto_ptr<boost::asio::io_service::work> work1(new boost::asio::io_service::work(bg_ios));
+    std::auto_ptr<boost::asio::io_service::work> fg_work(new boost::asio::io_service::work(fg_ios)); // this keeps the fg_ios alive 
+    std::auto_ptr<boost::asio::io_service::work> bg_work(new boost::asio::io_service::work(bg_ios)); // this keeps the bg_ios alive
     boost::thread fg(boost::bind(&boost::asio::io_service::run, &fg_ios));
     boost::thread bg(boost::bind(&boost::asio::io_service::run, &bg_ios));
 
-
     // precondition CREATE TABLE postgres_asio_sample  ( id integer, val text )
 
-
-    for (int i = 0; i != 500; ++i)
+    for (int i = 0; i != 50; ++i)
     {
         auto connection = boost::make_shared<postgres_asio::connection>(fg_ios, bg_ios);
         connection->set_log_id("xxxx-xxxx-xx" + std::to_string(i));
@@ -41,7 +39,7 @@ int main(int argc, char *argv[])
             if (!ec)
             {
                 std::string statement = "insert into postgres_asio_sample (id, val) VALUES\n";
-                size_t items = 10000;
+                size_t items = 100;
                 for (int i = 0; i != items; ++i)
                 {
                     const char* ch = i < (items - 1) ? ",\n" : ";\n";
@@ -49,29 +47,26 @@ int main(int argc, char *argv[])
                     statement += " (" + std::to_string(i) + ", '" + val + "')" + ch;
                 }
 
-                std::cerr << connection->get_log_id() << " inserting!!" << std::endl;
+                BOOST_LOG_TRIVIAL(info) << "async_insert";
                 connection->exec(statement, [connection](int ec, boost::shared_ptr<PGresult> res)
                 {
                     if (ec)
                     {
-                        std::cerr << connection->get_log_id() << " insert failed ec:" << ec << " last_error:" << connection->last_error() << std::endl;
+                        BOOST_LOG_TRIVIAL(error) << " insert failed ec:" << ec << " last_error:" << connection->last_error();
                         return;
                     }
-                    std::cerr << connection->get_log_id() << " done!!" << std::endl;
+                    BOOST_LOG_TRIVIAL(info) << "async insert - done!!";
                 });
             }
         });
     }
 
-    while (true)
-    {
-        boost::this_thread::sleep(boost::posix_time::milliseconds(1000));
-    }
-
-    work1.reset();
-    work2.reset();
-    //bg_ios.stop();
-    //fg_ios.stop();
+    BOOST_LOG_TRIVIAL(debug) << "work reset";
+    fg_work.reset();
+    bg_work.reset();
+    BOOST_LOG_TRIVIAL(debug) << "bg join";
     bg.join();
+    BOOST_LOG_TRIVIAL(debug) << "fg join";
     fg.join();
+    BOOST_LOG_TRIVIAL(debug) << "done";
 }
