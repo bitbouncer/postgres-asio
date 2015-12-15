@@ -25,19 +25,22 @@ namespace postgres_asio
 {
     inline static boost::shared_ptr<PGresult> make_shared(PGresult* p) { return boost::shared_ptr<PGresult>(p, PQclear); }
 
-    connection::connection(boost::asio::io_service& fg, boost::asio::io_service& bg) :
+    connection::connection(boost::asio::io_service& fg, boost::asio::io_service& bg, std::string trace_id) :
         _fg_ios(fg),
         _bg_ios(bg),
         _socket(fg),
         _pg_conn(NULL),
-        _warn_timeout(60000)
+        _warn_timeout(60000),
+        _trace_id(trace_id)
     {
-        _log_id = to_string(boost::uuids::random_generator()());
+        if (!_trace_id.size())
+            _trace_id = to_string(boost::uuids::random_generator()());
+        BOOST_LOG_TRIVIAL(trace) << _trace_id << ", " << BOOST_CURRENT_FUNCTION;
     }
 
     connection::~connection()
     {
-        BOOST_LOG_TRIVIAL(debug) << _log_id << ", postgres diconnecting";
+        BOOST_LOG_TRIVIAL(trace) << _trace_id << ", " << BOOST_CURRENT_FUNCTION;
         PQfinish(_pg_conn);
     }
 
@@ -51,11 +54,10 @@ namespace postgres_asio
     uint32_t    connection::backend_pid() const                { return (uint32_t)PQbackendPID(_pg_conn); }
     int         connection::socket() const                     { return PQsocket(_pg_conn); }
     bool        connection::set_client_encoding(std::string s) { return (PQsetClientEncoding(_pg_conn, s.c_str()) == 0); }
-    void        connection::set_log_id(std::string id)         { _log_id = id; }
-    std::string connection::get_log_id() const                 { return _log_id; }
+    std::string connection::trace_id() const                   { return _trace_id; }
     void        connection::set_warning_timout(uint32_t ms)    { _warn_timeout = ms; }
 
-    // connect is a blocking thingh - pass this to bg thread pool
+    // connect is a blocking thing - pass this to bg thread pool
     void connection::connect(std::string connect_string, on_connect_callback cb)
     {
         auto self(shared_from_this()); // keeps connection alive until cb is done
@@ -103,32 +105,33 @@ namespace postgres_asio
         {
             if (duration > _warn_timeout)
             {
-                BOOST_LOG_TRIVIAL(warning) << _log_id << ", postgres::connect - took long time, t=" << duration;
+                BOOST_LOG_TRIVIAL(warning) << _trace_id << ", postgres::connect - took long time, t=" << duration;
             }
 
-            BOOST_LOG_TRIVIAL(info) << _log_id  << ", postgres::connect PQconnectdb complete, t=" << duration;
+            BOOST_LOG_TRIVIAL(info) << _trace_id << ", postgres::connect PQconnectdb complete, t=" << duration;
             _socket.assign(boost::asio::ip::tcp::v4(), socket());
             _fg_ios.post([this, self, cb](){ cb(0); });
             return;
         }
-        BOOST_LOG_TRIVIAL(error) << _log_id << ", postgres::connect PQconnectdb failed, status=" << status << ", " << last_error() << ", t=" << duration;
+        BOOST_LOG_TRIVIAL(error) << _trace_id << ", postgres::connect PQconnectdb failed, status=" << status << ", " << last_error() << ", t=" << duration;
         _fg_ios.post([this, self, status, cb](){ cb(status); });
     }
 
     void connection::exec(std::string statement, on_query_callback cb)
     {
-        BOOST_LOG_TRIVIAL(trace) << _log_id << ", " << BOOST_CURRENT_FUNCTION << ", s=" << statement.substr(0, STATEMENT_LOG_BYTES);
+        BOOST_LOG_TRIVIAL(trace) << _trace_id << ", " << BOOST_CURRENT_FUNCTION << ", s=" << statement.substr(0, STATEMENT_LOG_BYTES);
         auto self(shared_from_this()); // keeps connection alive until cb is done
         _start_ts = now();
         _current_statement = statement;
         if (PQsendQuery(_pg_conn, statement.c_str()) == 0) // 1 os good, 0 is bad...
         {
-            BOOST_LOG_TRIVIAL(error) << _log_id << ", postgres::exec PQsendQuery failed fast: s=" << statement.substr(0, STATEMENT_LOG_BYTES);
+            BOOST_LOG_TRIVIAL(error) << _trace_id << ", postgres::exec PQsendQuery failed fast: s=" << statement.substr(0, STATEMENT_LOG_BYTES);
             _fg_ios.post([this, self, cb](){ cb(PGRES_FATAL_ERROR, NULL); });
             return;
         }
         _socket.async_read_some(boost::asio::null_buffers(), boost::bind(&connection::_fg_socket_rx_cb, this, boost::asio::placeholders::error, self, cb));
     }
+
 
     std::pair<int, boost::shared_ptr<PGresult>> connection::exec(std::string statement)
     {
@@ -145,10 +148,10 @@ namespace postgres_asio
 
     void connection::_fg_socket_rx_cb(const boost::system::error_code& ec, boost::shared_ptr<connection> self, on_query_callback cb)
     {
-        BOOST_LOG_TRIVIAL(trace) << _log_id << ", " << BOOST_CURRENT_FUNCTION;
+        BOOST_LOG_TRIVIAL(trace) << _trace_id << ", " << BOOST_CURRENT_FUNCTION;
         if (ec)
         {
-            BOOST_LOG_TRIVIAL(warning) << _log_id << ", postgres::exec asio ec:" << ec.message();
+            BOOST_LOG_TRIVIAL(warning) << _trace_id << ", postgres::exec asio ec:" << ec.message();
             cb(ec.value(), NULL);
             return;
         }
@@ -156,7 +159,7 @@ namespace postgres_asio
         int res = PQconsumeInput(_pg_conn);
         if (!res)
         {
-            BOOST_LOG_TRIVIAL(warning) << _log_id << ", postgres::exec PQconsumeInput read error";
+            BOOST_LOG_TRIVIAL(warning) << _trace_id << ", postgres::exec PQconsumeInput read error";
             cb(PGRES_FATAL_ERROR, NULL); // we reuse a error code here...
             return;
         }
@@ -169,11 +172,11 @@ namespace postgres_asio
         {
             if (PQisBusy(_pg_conn))
             {
-                BOOST_LOG_TRIVIAL(trace) << _log_id << ", " << BOOST_CURRENT_FUNCTION << ", PQisBusy() - reading more";
+                BOOST_LOG_TRIVIAL(trace) << _trace_id << ", " << BOOST_CURRENT_FUNCTION << ", PQisBusy() - reading more";
                 _socket.async_read_some(boost::asio::null_buffers(), boost::bind(&connection::_fg_socket_rx_cb, this, boost::asio::placeholders::error, self, cb));
                 return;
             }
-            BOOST_LOG_TRIVIAL(trace) << _log_id << ", " << BOOST_CURRENT_FUNCTION << ", parsing result";
+            BOOST_LOG_TRIVIAL(trace) << _trace_id << ", " << BOOST_CURRENT_FUNCTION << ", parsing result";
             auto r = make_shared(PQgetResult(_pg_conn));
             if (r.get() == NULL)
                 break;
@@ -187,7 +190,7 @@ namespace postgres_asio
 
         if (_results.size() == 0)
         {
-            BOOST_LOG_TRIVIAL(error) << _log_id << ", postgres::exec returned no result, t=" << duration << ", s=" << _current_statement.substr(0, STATEMENT_LOG_BYTES);
+            BOOST_LOG_TRIVIAL(error) << _trace_id << ", postgres::exec returned no result, t=" << duration << ", s=" << _current_statement.substr(0, STATEMENT_LOG_BYTES);
             cb(PGRES_FATAL_ERROR, NULL); // we reuse a error code here...
             return;
         }
@@ -206,24 +209,39 @@ namespace postgres_asio
         case PGRES_NONFATAL_ERROR:
         case PGRES_COPY_BOTH:
         case PGRES_SINGLE_TUPLE:
-            BOOST_LOG_TRIVIAL(debug) << _log_id << ", postgres::exec complete, t=" << duration << ", s=" << _current_statement.substr(0, STATEMENT_LOG_BYTES);
+            BOOST_LOG_TRIVIAL(debug) << _trace_id << ", postgres::exec complete, t=" << duration << ", s=" << _current_statement.substr(0, STATEMENT_LOG_BYTES);
             if (duration > _warn_timeout)
             {
-                BOOST_LOG_TRIVIAL(warning) << _log_id << ", postgres::exec complete - took long time, t=" << duration << ", s = " << _current_statement.substr(0, STATEMENT_LOG_BYTES);
+                BOOST_LOG_TRIVIAL(warning) << _trace_id << ", postgres::exec complete - took long time, t=" << duration << ", s = " << _current_statement.substr(0, STATEMENT_LOG_BYTES);
             }
             cb(0, std::move(last_result));
             break;
         case PGRES_BAD_RESPONSE:
         case PGRES_FATAL_ERROR:
-            BOOST_LOG_TRIVIAL(error) << _log_id << ", postgres::exec failed " << last_error() << ", t=" << duration << ", s=" << _current_statement.substr(0, STATEMENT_LOG_BYTES);
+            BOOST_LOG_TRIVIAL(error) << _trace_id << ", postgres::exec failed " << last_error() << ", t=" << duration << ", s=" << _current_statement.substr(0, STATEMENT_LOG_BYTES);
             cb(status, std::move(last_result));
             break;
         default:
-            BOOST_LOG_TRIVIAL(warning) << _log_id << ", postgres::exec unknown status code, t=" << duration << ", s=" << _current_statement.substr(0, STATEMENT_LOG_BYTES);
+            BOOST_LOG_TRIVIAL(warning) << _trace_id << ", postgres::exec unknown status code, t=" << duration << ", s=" << _current_statement.substr(0, STATEMENT_LOG_BYTES);
             cb(status, std::move(last_result));
             break;
         }
     }
 
+
+    //connection_pool::connection_pool(boost::asio::io_service& fg, boost::asio::io_service& bg) : _fg_ios(fg), _bg_ios(bg)
+    //{
+    //}
+
+    ////TBD reuse connections.
+    //boost::shared_ptr<postgres_asio::connection> connection_pool::create()
+    //{
+    //    return boost::make_shared<postgres_asio::connection>(_fg_ios, _bg_ios);
+    //}
+    //
+    //// TBD 
+    //void connection_pool::release(boost::shared_ptr<postgres_asio::connection>)
+    //{
+    //}
 };
 

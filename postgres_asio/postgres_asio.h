@@ -29,7 +29,7 @@ namespace postgres_asio
         typedef boost::function<void(int ec)>                              on_connect_callback;
         typedef boost::function<void(int ec, boost::shared_ptr<PGresult>)> on_query_callback;
 
-        connection(boost::asio::io_service& fg, boost::asio::io_service& bg);
+        connection(boost::asio::io_service& fg, boost::asio::io_service& bg, std::string trace_id="");
         ~connection();
 
         /*
@@ -63,8 +63,7 @@ namespace postgres_asio
         uint32_t    backend_pid() const;
 
         bool        set_client_encoding(std::string s);
-        void        set_log_id(std::string id);
-        std::string get_log_id() const;
+        std::string trace_id() const;
         void        set_warning_timout(uint32_t ms);
 
         //async exec
@@ -81,10 +80,21 @@ namespace postgres_asio
         boost::asio::io_service&                 _bg_ios;
         boost::asio::ip::tcp::socket             _socket;
         PGconn*                                  _pg_conn;
-        std::string                              _log_id;
+        std::string                              _trace_id;
         int64_t                                  _start_ts;
         int32_t                                  _warn_timeout;
         std::string                              _current_statement;
         std::deque<boost::shared_ptr<PGresult>>  _results;
     };
+
+  /*  class connection_pool
+    {
+    public:
+        connection_pool(boost::asio::io_service& fg, boost::asio::io_service& bg);
+        boost::shared_ptr<postgres_asio::connection> create();
+        void release(boost::shared_ptr<postgres_asio::connection>);
+    protected:
+        boost::asio::io_service& _fg_ios;
+        boost::asio::io_service& _bg_ios;
+    };*/
 };

@@ -33,7 +33,7 @@ int main(int argc, char *argv[])
     for (int i = 0; i != 50; ++i)
     {
         auto connection = boost::make_shared<postgres_asio::connection>(fg_ios, bg_ios);
-        connection->set_log_id("xxxx-xxxx-xx" + std::to_string(i));
+        std::string trace_id = "xxxx-xxxx-xx" + std::to_string(i);
         connection->connect(connect_string, [connection](int ec)
         {
             if (!ec)
