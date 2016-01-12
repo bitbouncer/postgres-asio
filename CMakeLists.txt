@@ -2,10 +2,10 @@ cmake_minimum_required(VERSION 2.8)
 INCLUDE(${CMAKE_SOURCE_DIR}/../csi-build-scripts/CMakeDependencies.txt)
 
 if(WIN32)
-    SET (PGSQLSRC "C:/Program Files/PostgreSQL/9.4")
+    SET (PGSQLSRC "C:/Program Files/PostgreSQL/9.5")
     include_directories(${PGSQLSRC}/include)
     link_directories(${CMAKE_SOURCE_DIR}/lib/$(Platform))
-    link_directories("C:/Program Files/PostgreSQL/9.4/lib")
+    link_directories("C:/Program Files/PostgreSQL/9.5/lib")
     set(EXT_LIBS postgres_asio libpq libeay32 ssleay32 Ws2_32) 
 endif()    
 
