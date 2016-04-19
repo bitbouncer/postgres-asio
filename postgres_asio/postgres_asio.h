@@ -1,9 +1,9 @@
 #pragma once
+#include <memory>
 #include <utility>
 #include <boost/asio.hpp>
 #include <boost/function.hpp>
 #include <boost/chrono/system_clocks.hpp>
-#include <boost/enable_shared_from_this.hpp>
 #include <deque>
 
 #ifdef WIN32
@@ -22,10 +22,10 @@
 //https://github.com/brianc/node-libpq
 
 namespace postgres_asio {
-  class connection : public boost::enable_shared_from_this<connection> {
+  class connection : public std::enable_shared_from_this<connection> {
   public:
-    typedef boost::function<void(int ec)>                              on_connect_callback;
-    typedef boost::function<void(int ec, boost::shared_ptr<PGresult>)> on_query_callback;
+    typedef boost::function<void(int ec)>                            on_connect_callback;
+    typedef boost::function<void(int ec, std::shared_ptr<PGresult>)> on_query_callback;
 
     connection(boost::asio::io_service& fg, boost::asio::io_service& bg, std::string trace_id = "");
     ~connection();
@@ -67,22 +67,22 @@ namespace postgres_asio {
     //async exec
     void exec(std::string statement, on_query_callback cb);
     //sync exec
-    std::pair<int, boost::shared_ptr<PGresult>> exec(std::string statement);
+    std::pair<int, std::shared_ptr<PGresult>> exec(std::string statement);
   private:
     int socket() const;
 
-    void _bg_connect(boost::shared_ptr<connection> self, std::string connect_string, on_connect_callback cb);
-    void _fg_socket_rx_cb(const boost::system::error_code& e, boost::shared_ptr<connection>, on_query_callback cb);
+    void _bg_connect(std::shared_ptr<connection> self, std::string connect_string, on_connect_callback cb);
+    void _fg_socket_rx_cb(const boost::system::error_code& e, std::shared_ptr<connection>, on_query_callback cb);
 
-    boost::asio::io_service&                 _fg_ios;
-    boost::asio::io_service&                 _bg_ios;
-    boost::asio::ip::tcp::socket             _socket;
-    PGconn*                                  _pg_conn;
-    std::string                              _trace_id;
-    int64_t                                  _start_ts;
-    int32_t                                  _warn_timeout;
-    std::string                              _current_statement;
-    std::deque<boost::shared_ptr<PGresult>>  _results;
+    boost::asio::io_service&              _fg_ios;
+    boost::asio::io_service&              _bg_ios;
+    boost::asio::ip::tcp::socket          _socket;
+    PGconn*                               _pg_conn;
+    std::string                           _trace_id;
+    int64_t                               _start_ts;
+    int32_t                               _warn_timeout;
+    std::string                           _current_statement;
+    std::deque<std::shared_ptr<PGresult>> _results;
   };
 
   /*  class connection_pool

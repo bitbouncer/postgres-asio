@@ -27,7 +27,7 @@ int main(int argc, char *argv[]) {
     BOOST_LOG_TRIVIAL(info) << "connect_async ec : " << ec;
     if(!ec) {
       BOOST_LOG_TRIVIAL(info) << "calling select_async";
-      connection->exec("select * from postgres_asio_sample;", [connection](int ec, boost::shared_ptr<PGresult> res) {
+      connection->exec("select * from postgres_asio_sample;", [connection](int ec, std::shared_ptr<PGresult> res) {
         if(ec) {
           BOOST_LOG_TRIVIAL(error) << "select failed, ec: " << ec;
           return;

@@ -21,7 +21,7 @@ static int64_t now() {
 }
 
 namespace postgres_asio {
-  inline static boost::shared_ptr<PGresult> make_shared(PGresult* p) { return boost::shared_ptr<PGresult>(p, PQclear); }
+  inline static std::shared_ptr<PGresult> make_shared(PGresult* p) { return std::shared_ptr<PGresult>(p, PQclear); }
 
   connection::connection(boost::asio::io_service& fg, boost::asio::io_service& bg, std::string trace_id) :
     _fg_ios(fg),
@@ -85,7 +85,7 @@ namespace postgres_asio {
   }
 
   // connect syncrounous and run callcack from fg thread event loop
-  void connection::_bg_connect(boost::shared_ptr<connection> self, std::string connect_string, on_connect_callback cb) {
+  void connection::_bg_connect(std::shared_ptr<connection> self, std::string connect_string, on_connect_callback cb) {
     _start_ts = now();
     _pg_conn = PQconnectdb(connect_string.c_str());
     auto status = PQstatus(_pg_conn); //
@@ -119,18 +119,18 @@ namespace postgres_asio {
   }
 
 
-  std::pair<int, boost::shared_ptr<PGresult>> connection::exec(std::string statement) {
-    std::promise<std::pair<int, boost::shared_ptr<PGresult>>> p;
-    std::future<std::pair<int, boost::shared_ptr<PGresult>>>  f = p.get_future();
-    exec(statement, [&p](int ec, boost::shared_ptr<PGresult> res) {
-      std::pair<int, boost::shared_ptr<PGresult>> val(ec, res);
+  std::pair<int, std::shared_ptr<PGresult>> connection::exec(std::string statement) {
+    std::promise<std::pair<int, std::shared_ptr<PGresult>>> p;
+    std::future<std::pair<int, std::shared_ptr<PGresult>>>  f = p.get_future();
+    exec(statement, [&p](int ec, std::shared_ptr<PGresult> res) {
+      std::pair<int, std::shared_ptr<PGresult>> val(ec, res);
       p.set_value(val);
     });
     f.wait();
     return f.get();
   }
 
-  void connection::_fg_socket_rx_cb(const boost::system::error_code& ec, boost::shared_ptr<connection> self, on_query_callback cb) {
+  void connection::_fg_socket_rx_cb(const boost::system::error_code& ec, std::shared_ptr<connection> self, on_query_callback cb) {
     BOOST_LOG_TRIVIAL(trace) << _trace_id << ", " << BOOST_CURRENT_FUNCTION;
     if(ec) {
       BOOST_LOG_TRIVIAL(warning) << _trace_id << ", postgres::exec asio ec:" << ec.message();
@@ -162,7 +162,6 @@ namespace postgres_asio {
       _results.push_back(r);
     }
 
-
     int32_t duration = (int32_t) (now() - _start_ts);
 
     // if we got a NULL here then we are ready to issue another async exec....
@@ -173,7 +172,7 @@ namespace postgres_asio {
       return;
     }
 
-    boost::shared_ptr<PGresult> last_result = *_results.rbegin();
+    std::shared_ptr<PGresult> last_result = *_results.rbegin();
     _results.clear();
 
     int status = PQresultStatus(last_result.get());
@@ -210,9 +209,9 @@ namespace postgres_asio {
   //}
 
   ////TBD reuse connections.
-  //boost::shared_ptr<postgres_asio::connection> connection_pool::create()
+  //std::shared_ptr<postgres_asio::connection> connection_pool::create()
   //{
-  //    return boost::make_shared<postgres_asio::connection>(_fg_ios, _bg_ios);
+  //    return std::make_shared<postgres_asio::connection>(_fg_ios, _bg_ios);
   //}
   //
   //// TBD 

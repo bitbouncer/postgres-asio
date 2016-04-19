@@ -8,7 +8,7 @@
 #include <boost/log/expressions.hpp>
 
 
-void handle_fetch1000(boost::shared_ptr<postgres_asio::connection> connection, size_t total_count, int ec, boost::shared_ptr<PGresult> res) {
+void handle_fetch1000(boost::shared_ptr<postgres_asio::connection> connection, size_t total_count, int ec, std::shared_ptr<PGresult> res) {
   if(ec)
     return;
 
@@ -17,13 +17,13 @@ void handle_fetch1000(boost::shared_ptr<postgres_asio::connection> connection, s
   BOOST_LOG_TRIVIAL(info) << "got " << tuples_in_batch << ", total: " << total_count;
   if(tuples_in_batch == 0) {
     BOOST_LOG_TRIVIAL(info) << "calling async_exec CLOSE mycursor; COMMIT....";
-    connection->exec("CLOSE mycursor; COMMIT", [connection](int ec, boost::shared_ptr<PGresult> res) {
+    connection->exec("CLOSE mycursor; COMMIT", [connection](int ec, std::shared_ptr<PGresult> res) {
       BOOST_LOG_TRIVIAL(info) << "async processing done";
     });
     return;
   }
   BOOST_LOG_TRIVIAL(info) << "calling async_exec FETCH 1000 in mycursor....";
-  connection->exec("FETCH 1000 in mycursor", [connection, total_count](int ec, boost::shared_ptr<PGresult> res) { handle_fetch1000(connection, total_count, ec, std::move(res)); });
+  connection->exec("FETCH 1000 in mycursor", [connection, total_count](int ec, std::shared_ptr<PGresult> res) { handle_fetch1000(connection, total_count, ec, std::move(res)); });
 }
 
 int main(int argc, char *argv[]) {
@@ -47,19 +47,19 @@ int main(int argc, char *argv[]) {
   connection->connect(connect_string, [connection](int ec) {
     if(!ec) {
       BOOST_LOG_TRIVIAL(info) << "calling async_exec BEGIN";
-      connection->exec("BEGIN", [connection](int ec, boost::shared_ptr<PGresult> res) {
+      connection->exec("BEGIN", [connection](int ec, std::shared_ptr<PGresult> res) {
         if(ec) {
           BOOST_LOG_TRIVIAL(error) << "BEGIN failed ec:" << ec << " last_error: " << connection->last_error();
           return;
         }
         BOOST_LOG_TRIVIAL(info) << "calling async_exec DECLARE mycursor....";
-        connection->exec("DECLARE mycursor CURSOR FOR SELECT * from postgres_asio_sample", [connection](int ec, boost::shared_ptr<PGresult> res) {
+        connection->exec("DECLARE mycursor CURSOR FOR SELECT * from postgres_asio_sample", [connection](int ec, std::shared_ptr<PGresult> res) {
           if(ec) {
             BOOST_LOG_TRIVIAL(error) << "DECLARE mycursor... failed ec:" << ec << " last_error: " << connection->last_error();
             return;
           }
           BOOST_LOG_TRIVIAL(info) << "calling async_exec FETCH 1000 in mycursor....";
-          connection->exec("FETCH 1000 in mycursor", [connection](int ec, boost::shared_ptr<PGresult> res) { handle_fetch1000(connection, 0, ec, std::move(res)); });
+          connection->exec("FETCH 1000 in mycursor", [connection](int ec, std::shared_ptr<PGresult> res) { handle_fetch1000(connection, 0, ec, std::move(res)); });
         });
       });
     }

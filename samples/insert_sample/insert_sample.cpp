@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
         }
 
         BOOST_LOG_TRIVIAL(info) << "async_insert";
-        connection->exec(statement, [connection](int ec, boost::shared_ptr<PGresult> res) {
+        connection->exec(statement, [connection](int ec, std::shared_ptr<PGresult> res) {
           if(ec) {
             BOOST_LOG_TRIVIAL(error) << " insert failed ec:" << ec << " last_error:" << connection->last_error();
             return;
