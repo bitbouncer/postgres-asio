@@ -29,7 +29,7 @@ int main(int argc, char *argv[]) {
   // precondition CREATE TABLE postgres_asio_sample  ( id integer, val text )
 
   for(int i = 0; i != 50; ++i) {
-    auto connection = boost::make_shared<postgres_asio::connection>(fg_ios, bg_ios);
+    auto connection = std::make_shared<postgres_asio::connection>(fg_ios, bg_ios);
     std::string trace_id = "xxxx-xxxx-xx" + std::to_string(i);
     connection->connect(connect_string, [connection](int ec) {
       if(!ec) {

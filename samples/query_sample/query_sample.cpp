@@ -22,7 +22,7 @@ int main(int argc, char *argv[]) {
   boost::thread fg(boost::bind(&boost::asio::io_service::run, &fg_ios));
   boost::thread bg(boost::bind(&boost::asio::io_service::run, &bg_ios));
 
-  auto connection = boost::make_shared<postgres_asio::connection>(fg_ios, bg_ios);
+  auto connection = std::make_shared<postgres_asio::connection>(fg_ios, bg_ios);
   connection->connect(connect_string, [connection](int ec) {
     BOOST_LOG_TRIVIAL(info) << "connect_async ec : " << ec;
     if(!ec) {

@@ -8,7 +8,7 @@
 #include <boost/log/expressions.hpp>
 
 
-void handle_fetch1000(boost::shared_ptr<postgres_asio::connection> connection, size_t total_count, int ec, std::shared_ptr<PGresult> res) {
+void handle_fetch1000(std::shared_ptr<postgres_asio::connection> connection, size_t total_count, int ec, std::shared_ptr<PGresult> res) {
   if(ec)
     return;
 
@@ -42,7 +42,7 @@ int main(int argc, char *argv[]) {
   boost::thread fg(boost::bind(&boost::asio::io_service::run, &fg_ios));
   boost::thread bg(boost::bind(&boost::asio::io_service::run, &bg_ios));
 
-  auto connection = boost::make_shared<postgres_asio::connection>(fg_ios, bg_ios);
+  auto connection = std::make_shared<postgres_asio::connection>(fg_ios, bg_ios);
   connection->set_warning_timout(100);
   connection->connect(connect_string, [connection](int ec) {
     if(!ec) {
