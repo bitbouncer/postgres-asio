@@ -16,4 +16,10 @@ else()
 endif()
 
 add_subdirectory(postgres_asio)
+
+if(__BUILD_EXAMPLES__)
 add_subdirectory(samples)
+endif()
+
+
+
