@@ -1,12 +1,10 @@
 #include <iostream>
+#include <memory>
+#include <thread>
 #include <postgres_asio/postgres_asio.h>
-#include <boost/thread.hpp>
-#include <boost/bind.hpp>
-#include <boost/make_shared.hpp>
 #include <boost/log/core.hpp>
 #include <boost/log/trivial.hpp>
 #include <boost/log/expressions.hpp>
-
 
 void handle_fetch1000(std::shared_ptr<postgres_asio::connection> connection, size_t total_count, int ec, std::shared_ptr<PGresult> res) {
   if(ec)
@@ -37,10 +35,13 @@ int main(int argc, char *argv[]) {
 
   boost::asio::io_service fg_ios;
   boost::asio::io_service bg_ios;
-  std::auto_ptr<boost::asio::io_service::work> fg_work(new boost::asio::io_service::work(fg_ios)); // this keeps the fg_ios alive 
-  std::auto_ptr<boost::asio::io_service::work> bg_work(new boost::asio::io_service::work(bg_ios)); // this keeps the bg_ios alive
-  boost::thread fg(boost::bind(&boost::asio::io_service::run, &fg_ios));
-  boost::thread bg(boost::bind(&boost::asio::io_service::run, &bg_ios));
+  auto fg_work(std::make_unique<boost::asio::io_service::work>(fg_ios)); // this keeps the fg_ios alive
+  auto bg_work(std::make_unique<boost::asio::io_service::work>(bg_ios)); // this keeps the bg_ios alive
+  std::thread fg([&] { fg_ios.run(); });
+  std::thread bg([&] { bg_ios.run(); });
+
+  //boost::thread fg(boost::bind(&boost::asio::io_service::run, &fg_ios));
+  //boost::thread bg(boost::bind(&boost::asio::io_service::run, &bg_ios));
 
   auto connection = std::make_shared<postgres_asio::connection>(fg_ios, bg_ios);
   connection->set_warning_timout(100);

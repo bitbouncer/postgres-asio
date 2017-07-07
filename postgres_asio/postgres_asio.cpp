@@ -1,6 +1,6 @@
 #include <future>
-#include <boost/bind.hpp>
 #include "postgres_asio.h"
+#include <boost/bind.hpp>
 #include <boost/log/core.hpp>
 #include <boost/log/trivial.hpp>
 #include <boost/log/expressions.hpp>
@@ -30,8 +30,10 @@ namespace postgres_asio {
     _pg_conn(NULL),
     _warn_timeout(60000),
     _trace_id(trace_id) {
-    if(!_trace_id.size())
-      _trace_id = to_string(boost::uuids::random_generator()());
+    if (!_trace_id.size()) {
+      auto uuid = boost::uuids::random_generator();
+      _trace_id = to_string(uuid());
+    }
     BOOST_LOG_TRIVIAL(trace) << _trace_id << ", " << BOOST_CURRENT_FUNCTION;
   }
 

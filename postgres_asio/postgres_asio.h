@@ -1,21 +1,15 @@
 #pragma once
 #include <memory>
 #include <utility>
-#include <boost/asio.hpp>
-#include <boost/function.hpp>
-#include <boost/chrono/system_clocks.hpp>
+#include <functional>
 #include <deque>
+#include <boost/asio.hpp>
+#include <boost/chrono/system_clocks.hpp>
 
 #ifdef WIN32
 #include <libpq-fe.h>
-#endif
-
-#ifdef __LINUX__
-#ifdef __CENTOS__
-#include <libpq-fe.h>
 #else
 #include <postgresql/libpq-fe.h>
-#endif
 #endif
 
 //inspiration
@@ -24,8 +18,8 @@
 namespace postgres_asio {
   class connection : public std::enable_shared_from_this<connection> {
   public:
-    typedef boost::function<void(int ec)>                            on_connect_callback;
-    typedef boost::function<void(int ec, std::shared_ptr<PGresult>)> on_query_callback;
+    typedef std::function<void(int ec)> on_connect_callback;
+    typedef std::function<void(int ec, std::shared_ptr<PGresult>)> on_query_callback;
 
     connection(boost::asio::io_service& fg, boost::asio::io_service& bg, std::string trace_id = "");
     ~connection();
